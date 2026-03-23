@@ -1,30 +1,16 @@
 // Package util provides utility functions for the CLI Proxy API server.
-// It includes helper functions for proxy configuration, HTTP client setup,
-// log level management, and other common operations used across the application.
+// Proxy support has been removed in the notanerd21 fork — SetProxy is a no-op.
+// All connections go direct to AI providers. Less code, less attack surface.
 package util
 
 import (
 	"net/http"
 
 	"github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
-	"github.com/router-for-me/CLIProxyAPI/v6/sdk/proxyutil"
-	log "github.com/sirupsen/logrus"
 )
 
-// SetProxy configures the provided HTTP client with proxy settings from the configuration.
-// It supports SOCKS5, HTTP, and HTTPS proxies. The function modifies the client's transport
-// to route requests through the configured proxy server.
-func SetProxy(cfg *config.SDKConfig, httpClient *http.Client) *http.Client {
-	if cfg == nil || httpClient == nil {
-		return httpClient
-	}
-
-	transport, _, errBuild := proxyutil.BuildHTTPTransport(cfg.ProxyURL)
-	if errBuild != nil {
-		log.Errorf("%v", errBuild)
-	}
-	if transport != nil {
-		httpClient.Transport = transport
-	}
+// SetProxy is a no-op. Proxy support has been removed.
+// Returns the httpClient unmodified for backward compatibility.
+func SetProxy(_ *config.SDKConfig, httpClient *http.Client) *http.Client {
 	return httpClient
 }

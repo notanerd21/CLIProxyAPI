@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -17,13 +18,27 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// OAuth configuration constants for Claude/Anthropic
+// OAuth configuration for Claude/Anthropic.
+// Client ID is configurable via CLIPROXY_CLAUDE_CLIENT_ID env var.
 const (
-	AuthURL     = "https://claude.ai/oauth/authorize"
-	TokenURL    = "https://api.anthropic.com/v1/oauth/token"
-	ClientID    = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
-	RedirectURI = "http://localhost:54545/callback"
+	AuthURL               = "https://claude.ai/oauth/authorize"
+	TokenURL              = "https://api.anthropic.com/v1/oauth/token"
+	defaultClaudeClientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+	RedirectURI           = "http://localhost:54545/callback"
 )
+
+// GetClientID returns the Claude OAuth Client ID, reading from env var first.
+// Fallback: upstream default if CLIPROXY_CLAUDE_CLIENT_ID is not set.
+func GetClientID() string {
+	if id := strings.TrimSpace(os.Getenv("CLIPROXY_CLAUDE_CLIENT_ID")); id != "" {
+		return id
+	}
+	return defaultClaudeClientID
+}
+
+// ClientID is kept as a package-level var for backward compatibility.
+// Initialized at package load time from env or default.
+var ClientID = GetClientID()
 
 // tokenResponse represents the response structure from Anthropic's OAuth token endpoint.
 // It contains access token, refresh token, and associated user/organization information.

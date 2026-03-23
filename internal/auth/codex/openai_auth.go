@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -19,13 +20,27 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// OAuth configuration constants for OpenAI Codex
+// OAuth configuration for OpenAI Codex.
+// Client ID is configurable via CLIPROXY_OPENAI_CLIENT_ID env var.
 const (
-	AuthURL     = "https://auth.openai.com/oauth/authorize"
-	TokenURL    = "https://auth.openai.com/oauth/token"
-	ClientID    = "app_EMoamEEZ73f0CkXaXp7hrann"
-	RedirectURI = "http://localhost:1455/auth/callback"
+	AuthURL              = "https://auth.openai.com/oauth/authorize"
+	TokenURL             = "https://auth.openai.com/oauth/token"
+	defaultOpenAIClientID = "app_EMoamEEZ73f0CkXaXp7hrann"
+	RedirectURI          = "http://localhost:1455/auth/callback"
 )
+
+// ClientID returns the OpenAI OAuth Client ID, reading from env var first.
+// Fallback: upstream default if CLIPROXY_OPENAI_CLIENT_ID is not set.
+func GetClientID() string {
+	if id := strings.TrimSpace(os.Getenv("CLIPROXY_OPENAI_CLIENT_ID")); id != "" {
+		return id
+	}
+	return defaultOpenAIClientID
+}
+
+// ClientID is kept as a package-level var for backward compatibility.
+// Initialized at package load time from env or default.
+var ClientID = GetClientID()
 
 // CodexAuth handles the OpenAI OAuth2 authentication flow.
 // It manages the HTTP client and provides methods for generating authorization URLs,

@@ -16,8 +16,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	configaccess "github.com/router-for-me/CLIProxyAPI/v6/internal/access/config_access"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/api"
+	tokenhandler "github.com/router-for-me/CLIProxyAPI/v6/internal/api/handlers/tokens"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/buildinfo"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/cmd"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
@@ -444,6 +447,12 @@ func main() {
 		CallbackPort: oauthCallbackPort,
 	}
 
+	// Build the in-memory store that is used when no external backend is configured.
+	// The web-creator platform will inject tokens via the REST injection API after startup.
+	memStoreInst := store.NewMemoryStore()
+	injectSecret := strings.TrimSpace(os.Getenv("CLIPROXY_INJECT_SECRET"))
+	tokenInjector := tokenhandler.NewHandler(memStoreInst, injectSecret)
+
 	// Register the shared token store once so all components use the same persistence backend.
 	if usePostgresStore {
 		sdkAuth.RegisterTokenStore(pgStoreInst)
@@ -452,7 +461,10 @@ func main() {
 	} else if useGitStore {
 		sdkAuth.RegisterTokenStore(gitStoreInst)
 	} else {
-		sdkAuth.RegisterTokenStore(sdkAuth.NewFileTokenStore())
+		// Default: pure in-memory store. No disk persistence.
+		// Tokens are re-injected at startup via POST /api/tokens.
+		sdkAuth.RegisterTokenStore(memStoreInst)
+		log.Info("using in-memory token store (no external backend configured)")
 	}
 
 	// Register built-in access providers before constructing services.
@@ -532,7 +544,7 @@ func main() {
 					password = localMgmtPassword
 				}
 
-				cancel, done := cmd.StartServiceBackground(cfg, configFilePath, password)
+				cancel, done := cmd.StartServiceBackground(cfg, configFilePath, password, buildInjectionOption(tokenInjector))
 
 				client := tui.NewClient(cfg.Port, password)
 				ready := false
@@ -578,7 +590,22 @@ func main() {
 			if !localModel {
 				registry.StartModelsUpdater(context.Background())
 			}
-			cmd.StartService(cfg, configFilePath, password)
+			cmd.StartService(cfg, configFilePath, password, buildInjectionOption(tokenInjector))
 		}
 	}
+}
+
+// buildInjectionOption returns a ServerOption that registers the /api/tokens injection
+// endpoints on the Gin engine. When the injection API is disabled (no secret configured)
+// the routes are still registered but always return 404 via the handler's middleware.
+func buildInjectionOption(h *tokenhandler.Handler) api.ServerOption {
+	return api.WithEngineConfigurator(func(engine *gin.Engine) {
+		apiGroup := engine.Group("/api")
+		apiGroup.Use(h.Middleware())
+		{
+			apiGroup.POST("/tokens", h.InjectToken)
+			apiGroup.DELETE("/tokens/:token", h.RemoveToken)
+			apiGroup.GET("/tokens", h.ListTokens)
+		}
+	})
 }
